@@ -9,7 +9,7 @@ const PER_MODEL_TIMEOUT_MS = 8000;
 const MAX_PROMPT_CHARS = 600;
 
 type Match = { kasb: string; hudud: string; holat: string; tavsif: string };
-
+// tested
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   santexnik: ["quvur", "kran", "suv", "sifon", "truba", "unitaz", "dush", "vanna", "santexnik", "труб", "кран", "вод", "сантех", "pipe", "tap", "faucet", "plumb", "leak"],
   elektrik: ["rozetka", "sim", "tok", "chiroq", "svet", "elektrik", "lyustra", "avtomat", "электр", "розетк", "провод", "свет", "люстр", "socket", "wire", "electric", "light"],
