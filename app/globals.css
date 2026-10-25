@@ -18,7 +18,7 @@
   --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  
+
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
   --animate-float: float 6s ease-in-out infinite;
@@ -43,19 +43,19 @@ body {
 
 /* Background Patterns */
 .hero-pattern {
-  background-image: 
+  background-image:
     radial-gradient(circle at 15% 50%, rgba(249, 115, 22, 0.15) 0%, transparent 50%),
     radial-gradient(circle at 85% 30%, rgba(26, 54, 93, 0.2) 0%, transparent 50%);
 }
 
 .dark .hero-pattern {
-  background-image: 
+  background-image:
     radial-gradient(circle at 15% 50%, rgba(249, 115, 22, 0.15) 0%, transparent 50%),
     radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.15) 0%, transparent 50%);
 }
 
 .ai-pattern {
-  background-image: 
+  background-image:
     radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
 }
 
@@ -103,6 +103,131 @@ body {
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(59, 130, 246, 0.6);
   }
 }
+
+/* ───────────── Ornaments (Uzbek-inspired geometric patterns) ───────────── */
+.pattern-star {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23F97316' stroke-opacity='0.28' stroke-width='1.2'%3E%3Crect x='12' y='12' width='32' height='32'/%3E%3Crect x='12' y='12' width='32' height='32' transform='rotate(45 28 28)'/%3E%3Ccircle cx='28' cy='28' r='4'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 56px 56px;
+}
+
+.dark .pattern-star {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%2393C5FD' stroke-opacity='0.16' stroke-width='1.2'%3E%3Crect x='12' y='12' width='32' height='32'/%3E%3Crect x='12' y='12' width='32' height='32' transform='rotate(45 28 28)'/%3E%3Ccircle cx='28' cy='28' r='4'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.pattern-dots {
+  background-image: radial-gradient(rgba(26, 54, 93, 0.18) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+
+.dark .pattern-dots {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.18) 1.2px, transparent 1.2px);
+}
+
+/* Edge-faded mask so patterns dissolve into the background */
+.mask-fade {
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+}
+
+/* Decorative border band (ikat-like diamonds) */
+.pattern-border {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 10px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10' viewBox='0 0 40 10'%3E%3Cpath d='M0 5 L10 0 L20 5 L10 10Z' fill='%23F97316'/%3E%3Cpath d='M20 5 L30 0 L40 5 L30 10Z' fill='%231A365D'/%3E%3C/svg%3E");
+  background-size: 40px 10px;
+  opacity: 0.85;
+}
+
+.dark .pattern-border {
+  opacity: 0.55;
+}
+
+.divider-ornament {
+  height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14' viewBox='0 0 28 14'%3E%3Cpath d='M0 7 L7 0 L14 7 L7 14Z' fill='none' stroke='%23F97316' stroke-opacity='0.6'/%3E%3Ccircle cx='21' cy='7' r='2' fill='%23F97316' fill-opacity='0.5'/%3E%3C/svg%3E");
+  background-size: 28px 14px;
+  background-repeat: repeat-x;
+}
+
+/* Marquee strip */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 38s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Soft shimmer sweep for highlighted buttons */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: shimmer 3.6s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%, 55% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -18px, 0) rotate(6deg); }
+}
+.animate-drift { animation: drift 9s ease-in-out infinite; }
+.animate-drift-slow { animation: drift 14s ease-in-out infinite reverse; }
+
+@keyframes ring-pulse {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+.ring-pulse::before,
+.ring-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgba(249, 115, 22, 0.55);
+  animation: ring-pulse 2.6s ease-out infinite;
+}
+.ring-pulse::after { animation-delay: 1.3s; }
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .marquee-track { animation: none; }
+}
+
+/* Hide scrollbars on horizontally scrollable strips (tabs) but keep them scrollable */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Never let long words/URLs break the layout on phones */
+html { -webkit-text-size-adjust: 100%; }
+img, svg, video { max-width: 100%; }
 
 @keyframes accordion-down {
   from { height: 0; opacity: 0; }

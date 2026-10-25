@@ -1,0 +1,128 @@
+rules_version = '2';
+
+// Epchil Firestore rules.
+// Deploy: paste into Firebase Console -> Firestore Database -> Rules -> Publish,
+// or run `firebase deploy --only firestore:rules`.
+//
+// Admin = verified account listed below (keep in sync with lib/admin.ts) OR a document admins/<uid>
+// created by hand in the console (no redeploy needed to add an admin that way).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && (
+        (request.auth.token.get('email_verified', false) == true
+          && request.auth.token.get('email', '') in [
+            'hojiyevdavron65@gmail.com',
+            'xojiyevdavron.uz@gmail.com',
+            'owakahoot@gmail.com'
+          ])
+        || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Blocked users (set by an admin) can no longer create orders or reviews.
+    function notBlocked() {
+      return !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('blocked', false);
+    }
+
+    // Fields only an admin may change on a master/user document.
+    function touchesAdminFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['isVerified', 'isHidden', 'isDemo', 'blocked']);
+    }
+
+    // A review is only valid if it matches a real order in the right status.
+    function reviewMatchesOrder(r) {
+      let o = get(/databases/$(database)/documents/orders/$(r.orderId)).data;
+      return (r.direction == 'c2m' && o.userId == r.fromId && o.masterId == r.toId && o.status == 'done')
+          || (r.direction == 'm2c' && o.masterId == r.fromId && o.userId == r.toId
+              && o.status in ['completed_by_master', 'done']);
+    }
+
+    // Admins created by hand in the console; each user may only check their own document.
+    match /admins/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Public master catalog; a master edits only their own document (doc id = auth uid).
+    // isVerified / isHidden / isDemo can only be set by an admin.
+    match /masters/{id} {
+      allow read: if true;
+      allow create: if signedIn() && request.auth.uid == id
+        && request.resource.data.get('isVerified', false) == false
+        && request.resource.data.get('isHidden', false) == false
+        && !('isDemo' in request.resource.data);
+      allow update: if signedIn() && request.auth.uid == id && !touchesAdminFields();
+      allow write: if isAdmin();
+    }
+
+    // Profiles: private to the owner (and admins).
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && !('blocked' in request.resource.data)
+        && !('isDemo' in request.resource.data);
+      allow update: if signedIn() && request.auth.uid == uid && !touchesAdminFields();
+      allow read, write: if isAdmin();
+    }
+
+    // Orders: visible/editable only to the customer and the master involved (and admins).
+    match /orders/{id} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid && notBlocked();
+      allow read, update: if signedIn()
+        && (resource.data.userId == request.auth.uid || resource.data.masterId == request.auth.uid);
+      allow read, write: if isAdmin();
+    }
+
+    // Reviews are the only source of ratings. Create-only: nobody can edit a review afterwards.
+    //   c2m (customer -> master) is public, m2c (master -> customer) is private to both sides + admins.
+    match /reviews/{reviewId} {
+      allow read: if resource.data.direction == 'c2m'
+        || (signedIn() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid))
+        || isAdmin();
+      allow create: if signedIn() && notBlocked()
+        && request.resource.data.fromId == request.auth.uid
+        && request.resource.data.direction in ['c2m', 'm2c']
+        && reviewId == request.resource.data.orderId + '_' + request.resource.data.direction
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+        && reviewMatchesOrder(request.resource.data);
+      allow write: if isAdmin();
+    }
+
+    // Notifications: anyone signed in can notify; only the recipient reads/marks them.
+    match /notifications/{id} {
+      allow create: if signedIn();
+      allow read, update: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // Chats: one thread per (customer, master) pair, id = "<customerId>_<masterId>".
+    // Admins can see thread metadata (for statistics) but not message contents.
+    match /chats/{chatId} {
+      // `resource == null` lets a participant probe a thread that does not exist yet.
+      allow get: if signedIn()
+        && (resource == null || request.auth.uid in resource.data.participants || isAdmin());
+      allow list: if signedIn() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow create: if signedIn()
+        && request.auth.uid in request.resource.data.participants
+        && chatId == request.resource.data.customerId + '_' + request.resource.data.masterId;
+      allow update: if signedIn() && request.auth.uid in resource.data.participants;
+
+      match /messages/{messageId} {
+        // Before the first message the chat doc does not exist: fall back to the id.
+        allow read: if signedIn()
+          && (exists(/databases/$(database)/documents/chats/$(chatId))
+              ? request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+              : request.auth.uid in chatId.split('_'));
+        allow create: if signedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      }
+    }
+  }
+}

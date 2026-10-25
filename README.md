@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Epchil AI Agent
 
-## Getting Started
+AI yordamida uy xizmatlari ustalarini topish va chaqirish platformasi (MVP). O'zbekcha, ruscha va inglizcha.
 
-First, run the development server:
+## Imkoniyatlar
+- AI qidiruv (matn yoki ovoz) → kasb, hudud, shoshilinchlik aniqlanadi (`/api/match`, Gemini + zaxira klassifikator)
+- Ustalar katalogi, filtrlar, tekshirilgan ustalar yuqorida
+- Buyurtma berish (xaritada manzil), usta qabul qiladi / rad etadi / yakunlaydi
+- **Mijoz va usta o'rtasida real vaqtdagi chat** (`/messages`), o'qilmagan xabarlar, brauzer bildirishnomalari
+- Mijoz va usta profillari, buyurtmalar (real vaqtda), daromad/xarajat statistikasi (haqiqiy buyurtmalardan)
+- **Reyting faqat sharhlardan hisoblanadi** (`reviews` kolleksiyasi): hech kim reytingni qo'lda o'zgartira olmaydi
+- **Admin panel** (`/admin`): umumiy statistika, ustalarni tekshirish/yashirish, buyurtmalar, foydalanuvchilarni bloklash, sharhlarni boshqarish, CSV eksport, demo ma'lumot
+- Light/dark rejim, mobil moslashuv
 
+## Ishga tushirish
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` (namuna):
+```
+GEMINI_API_KEY=...
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+# ixtiyoriy
+NEXT_PUBLIC_ADMIN_EMAILS=email1@gmail.com,email2@gmail.com
+NEXT_PUBLIC_SHOW_DEMO_MASTERS=1
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Firestore qoidalari (majburiy)
+Chat, buyurtma, reyting va admin ishlashi uchun [`firestore.rules`](firestore.rules) Firebase'ga yuklangan bo'lishi kerak:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Firebase Console → Firestore Database → Rules → fayl matnini qo'ying → **Publish**, yoki
+- `npx firebase-tools deploy --only firestore:rules --project <project-id>`
 
-## Learn More
+Qoidalar yangilanmasa: katalog, profil, chat yoki admin panel "Missing or insufficient permissions" xatosini beradi.
 
-To learn more about Next.js, take a look at the following resources:
+## Admin panel
+`/admin` faqat administratorlarga ochiq. Admin bo'lish:
+1. Google/Gmail hisobingiz `lib/admin.ts` va `firestore.rules` dagi `isAdmin()` ro'yxatida bo'lsa (email tasdiqlangan bo'lishi shart), yoki
+2. Firebase Console → Firestore → `admins` kolleksiyasiga hujjat qo'shing (hujjat id = foydalanuvchi uid). Qayta deploy kerak emas.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Asboblar → Demo ma'lumot yaratish** soxta usta/mijoz/buyurtma/sharhlarni yaratadi. Hammasi `isDemo` bilan belgilanadi, ommaviy katalogda ko'rinmaydi (ko'rsatish uchun `NEXT_PUBLIC_SHOW_DEMO_MASTERS=1`) va bitta tugma bilan o'chiriladi. Autentifikatsiya hisoblari yaratilmaydi.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Ma'lumotlar modeli
+| Kolleksiya | Hujjat id | Mazmuni |
+|---|---|---|
+| `users` | uid | profil (rol: `customer` / `master`), `blocked` faqat admin |
+| `masters` | uid | ommaviy usta kartochkasi, `isVerified` / `isHidden` faqat admin |
+| `orders` | auto | buyurtma: `userId`, `masterId`, `status` |
+| `reviews` | `<orderId>_c2m` / `_m2c` | reyting va sharh; faqat yaratish mumkin, tahrirlab bo'lmaydi |
+| `chats` | `<customerId>_<masterId>` | suhbat; `messages` ichki kolleksiya |
+| `notifications` | auto | `userId` ga yo'naltirilgan bildirishnoma |
+| `admins` | uid | qo'lda yaratiladigan administrator belgisi |
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Ma'lum cheklovlar (keyingi qadamlar)
+- Reyting o'rtachasi o'qish paytida hisoblanadi (katalog barcha mijoz sharhlarini o'qiydi). Foydalanuvchi ko'payganda Cloud Function bilan agregatga ko'chirish kerak
+- Buyurtma holati o'zgarishlari qoidalar bilan cheklangan, lekin to'liq holat mashinasi emas
+- To'lov integratsiyasi yo'q (naqd)
+- Telegram bot va mobil ilova rejada

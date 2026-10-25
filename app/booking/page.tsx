@@ -1,25 +1,21 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, ArrowRight, Sparkles, Filter, Search, Bolt, Languages, ChevronDown, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MasterCard, Master } from "@/components/booking/MasterCard";
 import { FilterSidebar, FilterState } from "@/components/booking/FilterSidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useLanguage } from "@/components/language-provider";
-import Link from "next/link";
+import { useLanguage, tr, SPEECH_LANG } from "@/components/language-provider";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Skeleton } from "@/components/ui/skeleton";
+import { fetchMasterRatings } from "@/lib/reviews";
 
-const mockMasters: Master[] = [
-  { id: "1", name: "Azizbek Karimov", avatar: "https://i.pravatar.cc/150?u=a1", profession: "santexnik", rating: 4.9, completedJobs: 142, price: 80000, distance: 3, region: "Toshkent shahri", district: "Yunusobod" },
-  { id: "2", name: "Dilshod Rahimov", avatar: "https://i.pravatar.cc/150?u=a2", profession: "elektrik", rating: 4.2, completedJobs: 89, price: 50000, distance: 12, region: "Toshkent shahri", district: "Chilonzor" },
-  { id: "3", name: "Rustam Aliyev", avatar: "https://i.pravatar.cc/150?u=a3", profession: "santexnik", rating: 5.0, completedJobs: 300, price: 150000, distance: 5, region: "Samarqand", district: "Samarqand shahri" },
-  { id: "4", name: "Murod Jonuzoqov", avatar: "https://i.pravatar.cc/150?u=a4", profession: "maishiy_texnika_ustasi", rating: 4.6, completedJobs: 42, price: 100000, distance: 8, region: "Toshkent viloyati", district: "Zangiota" },
-  { id: "5", name: "Olimjon To'rayev", avatar: "https://i.pravatar.cc/150?u=a5", profession: "kafelchi", rating: 4.8, completedJobs: 215, price: 120000, distance: 20, region: "Toshkent shahri", district: "Mirobod" },
-  { id: "6", name: "Sardor Ahmedov", avatar: "https://i.pravatar.cc/150?u=a6", profession: "santexnik", rating: 4.4, completedJobs: 56, price: 70000, distance: 15, region: "Samarqand", district: "Urgut" },
-  { id: "7", name: "Botir Qodirov", avatar: "https://i.pravatar.cc/150?u=a7", profession: "elektrik", rating: 4.9, completedJobs: 412, price: 90000, distance: 2, region: "Toshkent shahri", district: "Yakkasaroy" },
-  { id: "8", name: "Jamshid Tursunov", avatar: "https://i.pravatar.cc/150?u=a8", profession: "tozalovchi", rating: 4.7, completedJobs: 120, price: 150000, distance: 7, region: "Toshkent viloyati", district: "Chirchiq" },
-];
+// Demo masters (created from the admin panel) are hidden from the public catalog unless this is "1".
+const SHOW_DEMO_MASTERS = process.env.NEXT_PUBLIC_SHOW_DEMO_MASTERS === "1";
+import Link from "next/link";
 
 const dictionaries = {
   uz: {
@@ -63,7 +59,82 @@ const dictionaries = {
     filterMobile: "Фильтры",
     open: "Открыть",
     close: "Закрыть"
+  },
+  en: {
+    login: "Sign in",
+    aiTitle: "Type or say the problem,",
+    aiTitleHighlight: "AI finds the best master",
+    aiTitleEnd: "for you",
+    searchPlaceholder: "E.g. A pipe burst in my house...",
+    searchBtn: "Search",
+    aiAnalyzing: "AI is analyzing...",
+    aiFound: "Problem identified",
+    kasb: "Trade",
+    hudud: "Area",
+    holat: "Status",
+    catalogTitle: "Masters catalog",
+    totalFound: "{n} masters found",
+    notFound: "Nobody found",
+    notFoundDesc: "No masters match your criteria. Try changing the filters.",
+    clearFilters: "Clear filters",
+    filterMobile: "Filters",
+    open: "Open",
+    close: "Close"
   }
+};
+
+
+const getSemanticKeywords = (query: string): string[] => {
+  const q = query.toLowerCase();
+  const matchedCategories: string[] = [];
+
+  if (
+    q.includes("quvur") || q.includes("kran") || q.includes("suv") ||
+    q.includes("sifon") || q.includes("truba") || q.includes("santexnik") ||
+    q.includes("unitaz") || q.includes("dush") || q.includes("vanna") ||
+    q.includes("труб") || q.includes("кран") || q.includes("вод") ||
+    q.includes("сантех") || q.includes("душ")
+  ) {
+    matchedCategories.push("santexnik");
+  }
+
+  if (
+    q.includes("rozetka") || q.includes("sim") || q.includes("tok") ||
+    q.includes("chiroq") || q.includes("svet") || q.includes("elektrik") ||
+    q.includes("lyustra") || q.includes("montaj") || q.includes("avtomat") ||
+    q.includes("электр") || q.includes("розетк") || q.includes("провод") ||
+    q.includes("свет") || q.includes("люстр")
+  ) {
+    matchedCategories.push("elektrik");
+  }
+
+  if (
+    q.includes("kafel") || q.includes("plitka") || q.includes("kafelchi") ||
+    q.includes("mramor") || q.includes("keramika") ||
+    q.includes("плитк") || q.includes("кафел") || q.includes("пол")
+  ) {
+    matchedCategories.push("kafelchi");
+  }
+
+  if (
+    q.includes("rom") || q.includes("deraza") || q.includes("akfa") ||
+    q.includes("plastik") || q.includes("romchi") || q.includes("chivin") ||
+    q.includes("oyna") || q.includes("окон") || q.includes("окн") ||
+    q.includes("пластик") || q.includes("сетк")
+  ) {
+    matchedCategories.push("romchi");
+  }
+
+  if (
+    q.includes("tozalash") || q.includes("yuvish") || q.includes("uborka") ||
+    q.includes("tozalovchi") || q.includes("pilesos") || q.includes("chang") ||
+    q.includes("ximchistka") || q.includes("уборк") || q.includes("чистк") ||
+    q.includes("мыт") || q.includes("пыл")
+  ) {
+    matchedCategories.push("tozalovchi");
+  }
+
+  return matchedCategories;
 };
 
 export default function BookingPage() {
@@ -73,8 +144,16 @@ export default function BookingPage() {
   const [prompt, setPrompt] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
-  const [isRecording, setIsRecording] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [userLocation, setUserLocation] = useState<string | null>(null);
+
+  const [toastMsg, setToastMsg] = useState<{title: string, desc?: string, type?: 'error'|'success'} | null>(null);
+  const showToast = (title: string, desc?: string, type: 'error'|'success' = 'error') => {
+    setToastMsg({ title, desc, type });
+    setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  const recognitionRef = useRef<any>(null);
 
   const [filters, setFilters] = useState<FilterState>({
     distance: 50,
@@ -85,46 +164,158 @@ export default function BookingPage() {
     district: "Barchasi",
   });
 
+  const [masters, setMasters] = useState<Master[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setIsLoadingData(true);
+      setLoadError(false);
+      try {
+        const [querySnapshot, ratings] = await Promise.all([
+          getDocs(collection(db, "masters")),
+          fetchMasterRatings().catch(() => new Map<string, { average: number | null; count: number }>()),
+        ]);
+        if (cancelled) return;
+        setMasters(
+          querySnapshot.docs.map((d) => {
+            const docData = d.data();
+            return {
+              id: d.id,
+              firstName: docData.firstName || "",
+              lastName: docData.lastName || "",
+              phone: docData.phone || "",
+              category: docData.category || "",
+              services: docData.services || [],
+              basePrice: docData.basePrice || 0,
+              rating: ratings.get(d.id)?.average ?? 0,
+              reviewsCount: ratings.get(d.id)?.count ?? 0,
+              isDemo: !!docData.isDemo,
+              isHidden: !!docData.isHidden,
+              isVerified: docData.isVerified || false,
+              region: docData.region || "",
+              district: docData.district || "",
+              isAvailable: docData.isAvailable ?? true,
+            } as Master;
+          })
+        );
+      } catch (error) {
+        console.error("Error fetching masters:", error);
+        if (!cancelled) setLoadError(true);
+      } finally {
+        if (!cancelled) setIsLoadingData(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  // Bosh sahifadagi AI qidiruvdan keladigan query parametrlarini o'qish
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      const searchQuery = searchParams.get("search") || "";
+      const region = searchParams.get("region") || "Barchasi";
+      const promptParam = searchParams.get("prompt") || "";
+
+      if (searchQuery || region !== "Barchasi" || promptParam) {
+        setFilters(prev => ({
+          ...prev,
+          searchQuery: searchQuery || prev.searchQuery,
+          region: region !== "Barchasi" ? region : prev.region,
+        }));
+        if (promptParam) {
+          setPrompt(promptParam);
+          setAiResult({
+            kasb: searchQuery,
+            hudud: region,
+            tavsif: promptParam,
+            holat: "odatiy"
+          });
+        }
+      }
+    }
+  }, []);
+
+
   const [showMobileFilter, setShowMobileFilter] = useState(false);
 
   // Speech Recognition Setup
-  const startRecording = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Sizning brauzeringizda mikrofon orqali yozish imkoniyati yo'q.");
+  const toggleRecording = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = locale === "uz" ? "uz-UZ" : "ru-RU";
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showToast(
+        tr(locale, "Xatolik", "Ошибка", "Error"),
+        tr(locale, "Sizning brauzeringizda ovozli qidiruv qo'llab-quvvatlanmaydi.", "Голосовой поиск не поддерживается в вашем браузере.", "Voice search is not supported in your browser."),
+        "error"
+      );
+      return;
+    }
 
-    recognition.onstart = () => {
-      setIsRecording(true);
-    };
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.lang = SPEECH_LANG[locale];
+      recognition.continuous = false;
+      recognition.interimResults = false;
 
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setPrompt(transcript);
-    };
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
 
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
-      setIsRecording(false);
-    };
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setPrompt(transcript);
+        handleAiSearch(transcript);
+      };
 
-    recognition.onend = () => {
-      setIsRecording(false);
-      // Optional: Auto search after recording finishes
-      // handleAiSearch();
-    };
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          showToast(
+            tr(locale, "Mikrofonga ruxsat berilmagan", "Нет доступа к микрофону", "Microphone access denied"),
+            tr(locale, "Iltimos, brauzer sozlamalaridan mikrofonga ruxsat bering.", "Разрешите доступ к микрофону в настройках браузера.", "Please allow microphone access in your browser settings."),
+            "error"
+          );
+        } else {
+          showToast(
+            tr(locale, "Xatolik yuz berdi", "Произошла ошибка", "Something went wrong"),
+            tr(locale, "Ovozni aniqlashda xatolik yuz berdi. Qayta urinib ko'ring.", "Не удалось распознать голос. Попробуйте ещё раз.", "Could not recognize your voice. Please try again."),
+            "error"
+          );
+        }
+      };
 
-    recognition.start();
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (error) {
+      showToast(
+        tr(locale, "Xatolik", "Ошибка", "Error"),
+        tr(locale, "Mikrofonni ishga tushirib bo'lmadi", "Не удалось включить микрофон", "Could not start the microphone"),
+        "error"
+      );
+      setIsListening(false);
+    }
   };
 
-  const handleAiSearch = async () => {
-    if (!prompt.trim()) return;
+  const handleAiSearch = async (overridePrompt?: string) => {
+    const finalPrompt = overridePrompt || prompt;
+    if (!finalPrompt.trim()) return;
     setIsAnalyzing(true);
     setAiResult(null);
 
@@ -157,88 +348,69 @@ export default function BookingPage() {
       const res = await fetch("/api/match", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, userLocation: currentLocation }),
+        body: JSON.stringify({ prompt: finalPrompt, userLocation: currentLocation }),
       });
       const data = await res.json();
-      
+      console.log(data);
       if (!res.ok || data.error) {
-        setAiResult({ error: data.error || "Xatolik yuz berdi" });
+        setAiResult({ error: data.error || tr(locale, "Xatolik yuz berdi", "Произошла ошибка", "Something went wrong") });
       } else {
         setAiResult(data);
         if (data.kasb) {
           setFilters(f => ({ ...f, searchQuery: data.kasb }));
         }
+        if (data.hudud && data.hudud.toLowerCase() !== "noma'lum") {
+          setFilters(f => ({ ...f, region: data.hudud }));
+        }
       }
     } catch (err) {
       console.error(err);
-      setAiResult({ error: "Server bilan aloqa yo'q" });
+      setAiResult({ error: tr(locale, "Server bilan aloqa yo'q", "Нет связи с сервером", "Cannot reach the server") });
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const filteredMasters = useMemo(() => {
-    return mockMasters.filter(m => {
-      const matchSearch = m.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) || 
-                          m.profession.toLowerCase().replace(/_/g, " ").includes(filters.searchQuery.toLowerCase());
-      const matchDistance = m.distance <= filters.distance;
-      const matchPrice = m.price >= filters.minPrice;
+    const query = filters.searchQuery.trim().toLowerCase();
+    const semanticCategories = getSemanticKeywords(query);
+
+    return masters.filter(m => {
+      if (m.isHidden || (m.isDemo && !SHOW_DEMO_MASTERS)) return false;
+      const fullName = `${m.firstName} ${m.lastName}`.toLowerCase();
+
+      // Aqlli semantik filtr: ism, xizmat nomi yoki yozilgan so'zning semantik kasbiga mos kelsa
+      const matchSearch = !query ||
+                          fullName.includes(query) ||
+                          m.category.toLowerCase().replace(/_/g, " ").includes(query) ||
+                          (m.services && m.services.some(s => s.toLowerCase().includes(query))) ||
+                          semanticCategories.includes(m.category.toLowerCase());
+
+      const matchPrice = m.basePrice >= filters.minPrice;
       const matchRating = filters.onlyHighRated ? m.rating >= 4.5 : true;
       const matchRegion = filters.region === "Barchasi" || m.region === filters.region;
       const matchDistrict = filters.district === "Barchasi" || m.district === filters.district;
 
-      return matchSearch && matchDistance && matchPrice && matchRating && matchRegion && matchDistrict;
-    });
-  }, [filters]);
+      return matchSearch && matchPrice && matchRating && matchRegion && matchDistrict;
+    }).sort((a, b) => Number(b.isVerified) - Number(a.isVerified) || b.rating - a.rating || b.reviewsCount - a.reviewsCount);
+  }, [filters, masters]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 font-sans selection:bg-[#F97316]/30 transition-colors duration-300">
-      
-      {/* HEADER */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-200/50 dark:border-slate-800/50 bg-white/70 dark:bg-slate-950/70 backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-[#1A365D] dark:text-blue-200">
-            <div className="bg-gradient-to-br from-[#F97316] to-orange-500 text-white p-1.5 rounded-xl shadow-lg shadow-orange-500/20">
-              <Bolt size={24} />
-            </div>
-            Epchil
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <ThemeToggle />
-            <div className="relative hidden sm:block">
-              <Languages className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-              <select
-                className="h-10 appearance-none rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 pl-9 pr-8 text-sm outline-none cursor-pointer hover:border-[#F97316] transition-colors focus:ring-2 focus:ring-[#F97316]/20 text-slate-900 dark:text-slate-100"
-                value={locale}
-                onChange={(e) => setLocale(e.target.value as "uz" | "ru")}
-                aria-label="Tilni tanlang"
-              >
-                <option value="uz">UZ</option>
-                <option value="ru">RU</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
-            </div>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button className="h-10 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 px-6 font-semibold shadow-md">
-                {t.login}
-              </Button>   
-            </motion.div>
-          </div>
-        </div>
-      </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        
+
         {/* 1-QISM: FAST LANE (AI Agent) */}
         <section className="mb-14">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-[#1A365D] dark:bg-blue-950 rounded-[3rem] p-8 md:p-14 shadow-2xl relative overflow-hidden"
           >
+            <div className="pattern-star absolute inset-0 opacity-40" aria-hidden="true"></div>
             <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 rounded-full blur-[100px]"></div>
             <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#F97316]/20 rounded-full blur-[100px]"></div>
-            
+
             <div className="relative z-10 max-w-3xl mx-auto text-center">
               <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-blue-100 text-sm font-bold mb-6 backdrop-blur-md">
                 <Sparkles size={16} className="text-yellow-400" /> Epchil AI - Fast Lane
@@ -247,7 +419,7 @@ export default function BookingPage() {
                 {t.aiTitle} <br className="hidden md:block" />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-orange-400">{t.aiTitleHighlight}</span> {t.aiTitleEnd}
               </h1>
-              
+
               <div className="relative flex flex-col sm:flex-row items-center gap-3 bg-white/10 p-3 rounded-[2rem] backdrop-blur-md border border-white/20 shadow-inner">
                 <div className="relative flex-1 w-full">
                   <input
@@ -260,17 +432,17 @@ export default function BookingPage() {
                   />
                 </div>
                 <div className="flex gap-3 w-full sm:w-auto">
-                  <motion.button 
+                  <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={startRecording}
-                    className={`h-16 w-16 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0 group relative ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-gradient-to-br from-[#F97316] to-orange-500'}`}
+                    onClick={toggleRecording}
+                    className={`h-16 w-16 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0 group relative transition-all duration-300 ${isListening ? 'bg-gradient-to-br from-red-500 to-orange-600 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.8)]' : 'bg-gradient-to-br from-[#F97316] to-orange-500'}`}
                   >
                     <div className="absolute inset-0 bg-white/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <Mic size={28} className={isRecording ? "animate-bounce" : ""} />
+                    <Mic size={28} className={isListening ? "animate-bounce" : ""} />
                   </motion.button>
-                  <Button 
-                    onClick={handleAiSearch}
+                  <Button
+                    onClick={() => handleAiSearch()}
                     disabled={isAnalyzing}
                     className="h-16 px-8 rounded-2xl bg-[#F97316] sm:bg-white text-white sm:text-[#1A365D] hover:bg-orange-600 sm:hover:bg-slate-100 font-bold text-lg w-full sm:w-auto shadow-xl"
                   >
@@ -302,7 +474,7 @@ export default function BookingPage() {
                     {aiResult.error ? (
                       <div className="flex items-center gap-2 mb-4 text-red-400">
                         <CheckCircle2 size={24} />
-                        <h3 className="font-bold text-xl">Xatolik: {aiResult.error}</h3>
+                        <h3 className="font-bold text-xl">{tr(locale, "Xatolik", "Ошибка", "Error")}: {aiResult.error}</h3>
                       </div>
                     ) : (
                       <>
@@ -312,20 +484,20 @@ export default function BookingPage() {
                         </div>
                         <div className="flex flex-wrap gap-3">
                           <div className="bg-white text-[#1A365D] px-5 py-2.5 rounded-xl font-bold shadow-md">
-                            <span className="text-slate-500 font-medium mr-2">{t.kasb}:</span> 
-                            <span className="capitalize">{aiResult.kasb ? aiResult.kasb.replace(/_/g, " ") : "Aniqlanmadi"}</span>
+                            <span className="text-slate-500 font-medium mr-2">{t.kasb}:</span>
+                            <span className="capitalize">{aiResult.kasb ? aiResult.kasb.replace(/_/g, " ") : tr(locale, "Aniqlanmadi", "Не определено", "Not detected")}</span>
                           </div>
                           <div className="bg-white text-[#1A365D] px-5 py-2.5 rounded-xl font-bold shadow-md">
-                            <span className="text-slate-500 font-medium mr-2">{t.hudud}:</span> 
-                            {aiResult.hudud || "Toshkent"}
+                            <span className="text-slate-500 font-medium mr-2">{t.hudud}:</span>
+                            {aiResult.hudud || tr(locale, "Toshkent", "Ташкент", "Tashkent")}
                           </div>
                           <div className="bg-[#F97316] text-white px-5 py-2.5 rounded-xl font-bold shadow-md">
-                            <span className="text-orange-200 font-medium mr-2">{t.holat}:</span> 
-                            <span className="capitalize">{aiResult.holat || "Odatiy"}</span>
+                            <span className="text-orange-200 font-medium mr-2">{t.holat}:</span>
+                            <span className="capitalize">{aiResult.holat || tr(locale, "Odatiy", "Обычный", "Normal")}</span>
                           </div>
                         </div>
                         <p className="mt-4 text-blue-200 bg-black/20 p-4 rounded-xl border border-white/10 font-medium">
-                          {aiResult.tavsif || "AI tomonidan xulosa kutilmoqda..."}
+                          {aiResult.tavsif || tr(locale, "AI tomonidan xulosa kutilmoqda...", "Ожидается заключение ИИ...", "Waiting for the AI summary...")}
                         </p>
                       </>
                     )}
@@ -338,7 +510,7 @@ export default function BookingPage() {
 
         {/* 2-QISM: BROWSE LANE (Catalog & Filters) */}
         <section className="flex flex-col lg:flex-row gap-8">
-          
+
           {/* Mobile Filter Toggle */}
           <div className="lg:hidden flex justify-between items-center bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
             <span className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -365,7 +537,46 @@ export default function BookingPage() {
               </div>
             </div>
 
-            {filteredMasters.length > 0 ? (
+            {loadError && (
+              <div role="alert" className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between">
+                <span className="font-medium">
+                  {tr(locale, "Ustalar ro'yxatini yuklab bo'lmadi. Internet yoki ruxsatlarni tekshiring.", "Не удалось загрузить список мастеров. Проверьте интернет или права доступа.", "Could not load the masters list. Check your connection or permissions.")}
+                </span>
+                <Button variant="outline" onClick={() => setReloadKey((k) => k + 1)} className="h-9 rounded-xl border-red-300 text-red-700 dark:border-red-800 dark:text-red-300">
+                  {tr(locale, "Qayta urinish", "Повторить", "Retry")}
+                </Button>
+              </div>
+            )}
+
+            {isLoadingData ? (              <div className="grid sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 h-[230px] flex flex-col justify-between shadow-sm">
+                    <div className="flex gap-3">
+                      <Skeleton className="h-14 w-14 rounded-full" />
+                      <div className="flex flex-col gap-2 flex-1 pt-1">
+                        <Skeleton className="h-5 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-3 w-1/3 mt-1" />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Skeleton className="h-6 w-16 rounded-xl" />
+                      <Skeleton className="h-6 w-16 rounded-xl" />
+                    </div>
+                    <div className="flex justify-between items-center mt-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                      <div className="flex flex-col gap-1">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-5 w-24" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Skeleton className="h-10 w-16 rounded-xl" />
+                        <Skeleton className="h-10 w-24 rounded-xl" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredMasters.length > 0 ? (
               <motion.div layout className="grid sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                 <AnimatePresence>
                   {filteredMasters.map(master => (
@@ -378,13 +589,13 @@ export default function BookingPage() {
                       transition={{ duration: 0.2 }}
                       className="min-w-0"
                     >
-                      <MasterCard master={master} />
+                      <MasterCard master={master} aiProblem={prompt} />
                     </motion.div>
                   ))}
                 </AnimatePresence>
               </motion.div>
             ) : (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="bg-white dark:bg-slate-900 rounded-[2rem] p-10 sm:p-16 text-center border border-slate-200 dark:border-slate-800 shadow-sm"
@@ -394,7 +605,7 @@ export default function BookingPage() {
                 </div>
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">{t.notFound}</h3>
                 <p className="text-slate-500 dark:text-slate-400 mb-8 max-w-sm mx-auto">{t.notFoundDesc}</p>
-                <Button 
+                <Button
                   onClick={() => setFilters({ distance: 50, minPrice: 0, onlyHighRated: false, searchQuery: "", region: "Barchasi", district: "Barchasi" })}
                   className="h-12 px-8 rounded-xl bg-[#1A365D] hover:bg-[#1A365D]/90 text-white font-bold"
                 >
@@ -406,6 +617,30 @@ export default function BookingPage() {
         </section>
 
       </main>
+
+      {/* Toast Notification (shadcn-like) */}
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className={`fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 p-5 rounded-2xl shadow-2xl border flex items-start gap-4 sm:max-w-sm backdrop-blur-xl ${
+              toastMsg.type === 'error'
+                ? 'bg-red-500/90 border-red-500/50 text-white'
+                : 'bg-green-500/90 border-green-500/50 text-white'
+            }`}
+          >
+            <div className="flex-1">
+              <h4 className="font-bold text-lg">{toastMsg.title}</h4>
+              {toastMsg.desc && <p className="text-sm mt-1 opacity-90">{toastMsg.desc}</p>}
+            </div>
+            <button onClick={() => setToastMsg(null)} className="opacity-60 hover:opacity-100 transition-opacity">
+              <span className="text-xl">&times;</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

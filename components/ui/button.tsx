@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { cn } from "@/lib/utils";
 
 type ButtonVariant = "default" | "outline" | "ghost";
 
@@ -29,9 +30,13 @@ export function Button({
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-300 disabled:pointer-events-none disabled:opacity-50 ${getVariantClasses(
-        variant,
-      )} ${className}`}
+      // cn() merges conflicting Tailwind classes so a passed-in className
+      // (e.g. text-[#1A365D]) reliably overrides the variant defaults.
+      className={cn(
+        "inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-300 disabled:pointer-events-none disabled:opacity-50",
+        getVariantClasses(variant),
+        className,
+      )}
       {...props}
     />
   );
